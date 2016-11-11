@@ -36,7 +36,7 @@ class Box():
         self.rho = np.zeros(self.N+4);
         self.u = np.zeros(self.N+4);
         self.eps = np.zeros(self.N+4);
-        self.flux = np.zeros(self.N+4); # Allocate array for flux to be calculated by chosen method.
+        self.delta_rho = np.zeros(self.N+4); # Allocate array for flux to be calculated by chosen method.
         # Initialize grid and function:
         for n in range(self.N):
             self.X[n+2] = self.I[0] + n*self.dx;
@@ -44,20 +44,15 @@ class Box():
             self.rho[n+2] = self.rho0(self.X[n+2]+0.5/self.N);
             self.u[n+2] = self.u0(self.X[n+2]+0.5/self.N);
             self.eps[n+2] = self.eps0(self.X[n+2]+0.5/self.N);
-        self.update_boundaries();   
+        self.update_boundary_all();   
         
-        self.flux_functions = {"upwind" : self.flux_upwind,'lax_wendroff' : self.flux_lax_wendroff,
-                               'upwind_2nd_loop' : self.flux_upwind_2nd_loop, 'upwind_2nd_arr' : self.flux_upwind_2nd_array};
-    
-    
-    
+  
+  
     def integrate(self,T,method):
         ''' @param:
-           T: time to integrate
-           method: method of choice
+           T: time to integrate up to
         '''
-        # Pick method.
-        calc_flux = self.flux_functions[method];
+
 
         # Calculate dt:
         dt = self.sigma/self.a*self.dx;
@@ -65,48 +60,19 @@ class Box():
         while self.t<T: # integrate over time T.
             # Calculate flux:            
             self.t += dt;
-            calc_flux();
-            self.Psi[2:-2] += self.sigma*(self.flux[2:-2]-self.flux[3:-1]);
-            self.update_boundary_Psi();
-
-
-    def flux_upwind(self):
-        ''' Upwind method
-            Calculate flux divided by velocity a.
-            For Upwind Delta_Psi is zero.
-        '''
-        self.flux[2:-2] = self.Psi[1:-3];     
-        self.update_boundary_flux();
+            self.advection_rho();
             
-    def flux_upwind_2nd_loop(self):
-        ''' 2nd order Upwind method
-            Calculate flux divided by velocity a.
-        '''
-        kappa = 1-self.sigma;
-        for n in range(2,self.N+2):
-            k = (self.Psi[n]-self.Psi[n-1])*(self.Psi[n-1]-self.Psi[n-2]);
-            if k > 0:
-                self.flux[n] = self.Psi[n-1]+kappa*k/(self.Psi[n]-self.Psi[n-2]);
-            else:
-                self.flux[n] = self.Psi[n-1];
-        self.update_boundary_flux();
-        
-    def flux_upwind_2nd_array(self):
-        ''' 2nd order Upwind method
-            Calculate flux divided by velocity a.
-            Use numpy arrays for performance.
-        '''
-        self.flux[2:-2] = (1-self.sigma)*(self.Psi[2:-2]-self.Psi[1:-3])*(self.Psi[1:-3]-self.Psi[0:-4]);
-        self.flux[2:-2] *= (self.flux[2:-2]>0)*(self.Psi[2:-2]-self.Psi[0:-4]!=0)/(self.Psi[2:-2]-self.Psi[0:-4] + (self.Psi[2:-2]-self.Psi[0:-4]==0));
-        self.flux[2:-2] += self.Psi[1:-3];
-        self.update_boundary_flux();
-    
-    def flux_lax_wendroff(self):
-        ''' Lax-Wendroff method
-            Calculate flux divided by velocity a.
-        '''
-        self.flux[2:-2] = self.Psi[1:-3]+0.5*(1 - self.sigma)*(self.Psi[2:-2]-self.Psi[1:-3]);
-        self.update_boundary_flux();
+
+    def advection_rho(self):
+        '''Perform the advection step for rho.
+        Use the modified second order upwind scheme.
+        Use numpy arrays for performance.'''
+        self.delta_rho[2:-2] = 2*(self.rho[3:-1]-self.rho[2:-2])*(self.rho[2:-2]-self.rho[1:-3]);
+        self.delta_rho[2:-2] *= (self.delta_rho[2:-2]>0)*(self.rho[3:-1]-self.rho[1:-3]!=0)/(self.rho[3:-1]-self.rho[1:-3] + (self.rho[3:-1]-self.rho[1:-3]==0));
+        self.update_boundary(self.delta_rho);
+        # calculate rho for the case u>0
+        self.rho[2:-2] = (self.rho[1:-3] + 0.5*(1-self.u[2:-2]*self.dt/self.dx)*self.delta_rho[1:-3])*(self.u[2:-2]>0);
+        self.rho[2:-2] = (self.rho[2:-2] - 0.5*(1+self.u[2:-2]*self.dt/self.dx)*self.delta_rho[2:-2])*(self.u[2:-2]<=0);
 
     def update_boundary_all(self):
         '''Update boundaries of all variables.'''
@@ -115,24 +81,18 @@ class Box():
         self.update_boundary_eps();
 
     def update_boundary_rho(self):
-        '''Update ghost cells of rho.
-            Use periodic boundary conditions.
-        '''
+        '''Update ghost cells of rho.'''
         self.update_boundary(self.rho);
 
     def update_boundary_u(self):
-        '''Update ghost cells of u.
-            Use periodic boundary conditions.
-        '''
+        '''Update ghost cells of u.'''
         self.update_boundary(self.u);
         
     def update_boundary_eps(self):
-        '''Update ghost cells of eps.
-            Use periodic boundary conditions.
-        '''
+        '''Update ghost cells of eps'''
         self.update_boundary(self.eps);
 
-    def update_boundary(arr):
+    def update_boundary(self,arr):
         ''' Update ghost cells of variable stored in arr. 
         Use periodic boundary conditions. '''
         # Update ghost cells:
