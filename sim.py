@@ -1,40 +1,49 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Jul  1 17:33:06 2016
+Created on Sat Nov 12 15:01:47 2016
 
 @author: thomas
 """
 
-import matplotlib.pyplot as plt
-import advection
+import shocktube;
+import numpy as np;
+import matplotlib.pyplot as plt;
 
-def initial_function(x):
-    if (x<-1./3 or x>1./3):
-        return 0.0;
-    else:
-        return 1.0;
-
-
-def plot_after_time(T,methods):
-    # Plot integrated function after time T for all methods in method:
-    plt.figure();
-    plt.clf();
-    labels = ["analytic"];
-    # Plot initial function:
-    initial = advection.Box(initial_function,[-1,1],400,1.0);
-    plt.plot(initial.get_x(),initial.get_Psi(),'-')
-    for method in methods:
-        box = advection.Box(initial_function,[-1,1],400,1.0);
-        box.integrate(T,method);
-        labels.append(method);
-        plt.plot(box.get_x(),box.get_Psi(),'.')
-    plt.legend(labels,loc=(0.75,0.5));
-    plt.xlabel("x");
-    plt.ylabel("u");
-    plt.title("T = {}".format(T))
-    plt.draw();
-    plt.savefig("T{}.pdf".format(T));
+def rho0(x):
+    return 1.0*(x<=0.5) + 0.125*(x>0.5);
+        
+def u0(x):
+    return 0.0;
     
+def eps0(x):
+    return 2.5*(x<=0.5) + 2.0*(x>0.5);
 
-plot_after_time(4,['upwind','upwind_2nd_arr','lax_wendroff'])    
-plot_after_time(40,['upwind','upwind_2nd_arr','lax_wendroff'])   
+dt = 0.001;
+I=[0.0,1.0];
+t_end = 0.01;
+N_cells = 100;
+gamma = 1.4;
+
+box = shocktube.Box(rho0,u0,eps0,gamma,I,N_cells,dt);
+box.integrate(t_end);
+
+x = box.get_x();
+rho = box.get_rho();
+u = box.get_u();
+T = box.get_T();
+p = box.get_p();
+eps = box.get_eps();
+
+data_string = "# Numerical solution of shocktube problem after time t = {0:.3e}\n".format(t_end);
+data_string += "# I    x(i)      u(i)       rho(i)   Temp(i)   Pgas(i)\n"
+for n in range(N_cells):
+    data_string += "{0:03d}\t{1:.3e}\t{2:.3e}\t{3:.3e}\t{4:.3e}\t{5:.3e}\n".format(n,x[n],u[n],rho[n],T[n],p[n]);
+
+with open("numerical_results.txt", "w") as text_file:
+    text_file.write(data_string);
+
+plt.plot(x,rho);
+plt.plot(x,u);
+plt.plot(x,eps);
+plt.legend(["rho","u","eps"]);
+plt.draw();
