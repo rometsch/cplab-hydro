@@ -33,46 +33,86 @@ class Box():
         self.t = 0; # integration time
         self.X = np.zeros(self.N+4);
         # Use two ghost cells on each side.
+        # Allocate array for flux to be calculated by chosen method.
         self.rho = np.zeros(self.N+4);
         self.u = np.zeros(self.N+4);
         self.eps = np.zeros(self.N+4);
-        self.delta_rho = np.zeros(self.N+4); # Allocate array for flux to be calculated by chosen method.
+        self.delta = np.zeros(self.N+4);
+        self.flux = np.zeros(self.N+4);
         # Initialize grid and function:
-        for n in range(self.N):
-            self.X[n+2] = self.I[0] + n*self.dx;
-        for n in range(self.N-1):            
-            self.rho[n+2] = self.rho0(self.X[n+2]+0.5/self.N);
-            self.u[n+2] = self.u0(self.X[n+2]+0.5/self.N);
-            self.eps[n+2] = self.eps0(self.X[n+2]+0.5/self.N);
+        self.X[2:-2] = self.I[0] + self.dx*np.arange(self.N);
+        self.update_boundary(self.X);
+#        self.rho[2:-2] = self.rho0(self.X[2:-2]);
+#        self.u[2:-2] = self.u0(self.X[2:-2]);
+#        self.eps[2:-2] = self.eps0(self.X[2:-2]);
+        for f,f0 in ((self.rho,self.rho0),(self.u,self.u0),(self.eps,self.eps0)):
+            f[2:-2] = f0(self.X[2:-2]);
         self.update_boundary_all();   
         
   
   
-    def integrate(self,T,method):
+    def integrate(self,T):
         ''' @param:
            T: time to integrate up to
         '''
-
-
-        # Calculate dt:
-        dt = self.sigma/self.a*self.dx;
         
         while self.t<T: # integrate over time T.
             # Calculate flux:            
-            self.t += dt;
+            self.t += self.dt;
             self.advection_rho();
+            self.update_boundary_all();
+        
             
 
     def advection_rho(self):
         '''Perform the advection step for rho.
-        Use the modified second order upwind scheme.
-        Use numpy arrays for performance.'''
-        self.delta_rho[2:-2] = 2*(self.rho[3:-1]-self.rho[2:-2])*(self.rho[2:-2]-self.rho[1:-3]);
-        self.delta_rho[2:-2] *= (self.delta_rho[2:-2]>0)*(self.rho[3:-1]-self.rho[1:-3]!=0)/(self.rho[3:-1]-self.rho[1:-3] + (self.rho[3:-1]-self.rho[1:-3]==0));
-        self.update_boundary(self.delta_rho);
-        # calculate rho for the case u>0
-        self.rho[2:-2] = (self.rho[1:-3] + 0.5*(1-self.u[2:-2]*self.dt/self.dx)*self.delta_rho[1:-3])*(self.u[2:-2]>0);
-        self.rho[2:-2] = (self.rho[2:-2] - 0.5*(1+self.u[2:-2]*self.dt/self.dx)*self.delta_rho[2:-2])*(self.u[2:-2]<=0);
+        Use the modified second order upwind scheme.'''
+        flux_mass = self.advection_scalar(self.rho)*self.u;  
+        self.rho[2:-2] = self.rho[2:-2]-self.dt/self.dx*(flux_mass[3:-1]-flux_mass[2:-2]);
+        self.update_boundary_rho();
+
+        
+        
+    def advection_scalar(self,Y):
+        '''Calculate the flux of a scalar variable using the
+        2nd order upwind scheme'''
+        delta = np.zeros(self.N+4);
+        adv = np.zeros(self.N+4);
+        # calculate geometrical mean:
+        for n in range(1,self.N+3):
+            nom = (Y[n+1]-Y[n])*(Y[n]-Y[n-1]);
+            denom = (Y[n+1]-Y[n-1]);
+            if nom>0:
+                if (denom == 0):
+                    print("Encountered division by 0 in advection step of ",Y.__name__);
+                    delta[n] = 0;
+                else:
+                    delta[n] = 2*nom/denom;
+            else:
+                delta[n] = 0;
+        # calculate advected quantities:
+        for n in range(2,self.N+3):
+            if self.u[n] > 0 :
+                adv[n] = Y[n-1]+0.5*(1-self.u[n]*self.dt/self.dx)*delta[n-1];
+            else:
+                Y[n] - 0.5*(1-self.u[n]*self.dt/self.dx)*delta[n];
+        # return resulting flux:
+        return adv;
+                            
+        
+
+#    def advection_rho(self):
+#        '''Perform the advection step for rho.
+#        Use the modified second order upwind scheme.
+#        Use numpy arrays for performance.'''
+#        self.delta_rho[1:-1] = 2*(self.rho[2:]-self.rho[1:-1])*(self.rho[1:-1]-self.rho[0:-2]);
+#        self.delta_rho[1:-1] += (self.delta_rho[1:-1]>0)*(self.rho[2:]-self.rho[0:-2]!=0)/(self.rho[2:]-self.rho[0:-2] + (self.rho[2:]-self.rho[0:-2]==0));
+#        # calculate rho for the case u>0 and use one ghost cell at the right for usage in calculation of new rho
+#        self.flux_rho[2:-1] = (self.rho[1:-2] + 0.5*(1-self.u[2:-1]*self.dt/self.dx)*self.delta_rho[1:-2])*(self.u[2:-1]>0);
+#        # calculate rho for the case u<=0
+#        self.flux_rho[2:-1] += (self.rho[2:-1] - 0.5*(1+self.u[2:-1]*self.dt/self.dx)*self.delta_rho[2:-1])*(self.u[2:-1]<=0);
+#        self.flux_rho[2:-1] *= self.u[2:-1];
+#        self.rho[2:-2] -= self.dt/self.dx*(self.flux_rho[3:-1]-self.flux_rho[2:-2]);
 
     def update_boundary_all(self):
         '''Update boundaries of all variables.'''
