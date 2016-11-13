@@ -1,8 +1,16 @@
 # cplab-hydro
 hydrodynamics project for my computational physics lab
 
-## sim
-Execute `sim.py` to run differnt methods for linear advection and to get a plot comparing the differnt methods.
+## shocktube problem
+A numerical solution of the shocktube problem is performed in `sim.py`.
+To run the simulation and produce a plot comparing the obtained solution to an
+analytical one run
+`run.sh`
+on a unix system.
+You'll need `gnuplot` with the `pdfcairo terminal` and Python3.
+
+## advection
+Execute `sim_advection.py` to run differnt methods for linear advection and to get a plot comparing the differnt methods.
 
 ## loop vs array
 `loop_vs_array.py` is a script to compare execution times of the different methods.
