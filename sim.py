@@ -20,7 +20,7 @@ def eps0(x):
 
 dt = 0.001;
 I=[0.0,1.0];
-t_end = 0.01;
+t_end = 0.228;
 N_cells = 100;
 gamma = 1.4;
 

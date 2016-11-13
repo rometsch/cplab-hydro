@@ -68,45 +68,41 @@ class Box():
         
         # Advection with 2nd order Upwind scheme
         rho_new = np.zeros(self.N+4);
-        flux_mass = self.advection_scalar(self.rho)*self.u;  
+        flux_mass = np.zeros(self.N+4);
+        flux_mass[2:-1] = self.advection_scalar(self.rho)[2:-1]*self.u[2:-1];  
         rho_new[2:-2] = self.rho[2:-2]-self.dt/self.dx*(flux_mass[3:-1]-flux_mass[2:-2]);
-        self.update_boundary(rho_new);
+        self.update_boundary_rho(rho_new);
 
         u_new = np.zeros(self.N+4);
         flux_momentum = np.zeros(self.N+4);
-        flux_momentum[0:-1] = 0.5*self.advection_velocity(self.u)[0:-1]*(flux_mass[0:-1]+flux_mass[1:]);
-        flux_momentum[-1] = flux_momentum[3];
+        flux_momentum[2:-2] = 0.5*self.advection_velocity(self.u)[2:-2]*(flux_mass[2:-2]+flux_mass[3:-1]);
         rho_avg = np.zeros(self.N+4);
         rho_avg_new = np.zeros(self.N+4);
-        rho_avg[2:-2] = 0.5*(self.rho[1:-3]+self.rho[2:-2]);
-        self.update_boundary(rho_avg);
-        rho_avg_new[2:-2] = 0.5*(rho_new[1:-3]+rho_new[2:-2]);
-        self.update_boundary(rho_avg_new);
-        if (rho_avg==0).any() or (rho_avg_new==0).any():
-            print("Division by zero encountered in advection of velcoity");
-        u_new[3:-1] = (self.u[3:-1]*rho_avg[3:-1]-self.dt/self.dx*(flux_momentum[3:-1]-flux_momentum[2:-2]))/rho_avg_new[3:-1];
-        u_new[0] = u_new[-4];
-        u_new[1] = u_new[-3];
-        u_new[2] = u_new[-2];
-        u_new[-1] = u_new[3];
+        rho_avg[3:-2] = 0.5*(self.rho[2:-3]+self.rho[3:-2]);
+        rho_avg_new[3:-2] = 0.5*(rho_new[2:-3]+rho_new[3:-2]);
+        if (rho_avg_new[3:-2]==0).any():
+            print("t = {:.3e} : Division by zero encountered in advection of velcoity".format(self.t));
+        u_new[3:-2] = (self.u[3:-2]*rho_avg[3:-2]-self.dt/self.dx*(flux_momentum[3:-2]-flux_momentum[2:-3]))/rho_avg_new[3:-2];      
+        self.update_boundary_velocity(u_new);        
         
         eps_new = np.zeros(self.N+4);
-        flux_eps = flux_momentum*self.advection_scalar(self.eps);
-        if (rho_avg==0).any():
-            print("Division by zero encountered in advection of energy");
+        flux_eps = np.zeros(self.N+4);
+        flux_eps[2:-1] = flux_momentum[2:-1]*self.advection_scalar(self.eps)[2:-1];
+        if (rho_new[2:-2]==0).any():
+            print("t = {:.3e} : Division by zero encountered in advection of energy".format(self.t));
         eps_new[2:-2] = (self.eps[2:-2]*self.rho[2:-2]-self.dt/self.dx*(flux_eps[3:-1]-flux_eps[2:-2]))/rho_new[2:-2];
-        self.update_boundary(eps_new);
+        self.update_boundary_eps(eps_new);
         
         # force and pressure terms
-        p = (self.gamma-1)*rho_new*eps_new;
-        self.u[3:-1] = u_new[3:-1] - self.dt/self.dx*(p[3:-1]-p[2:-2])/rho_avg[2:-2];
-        self.u[0] = self.u[-4];
-        self.u[1] = self.u[-3];
-        self.u[2] = self.u[-2];
-        self.u[-1] = self.u[3];
+        p = np.zeros(self.N+4);
+        p[2:-2] = (self.gamma-1)*rho_new[2:-2]*eps_new[2:-2];
+        if (rho_avg_new[3:-2]==0).any():
+            print("t = {:.3e} : Division by zero encountered force and pressure calculation for velocity".format(self.t));
+        self.u[3:-2] = u_new[3:-2] - self.dt/self.dx*(p[3:-2]-p[2:-3])/rho_avg_new[3:-2];
+        self.update_boundary_velocity(self.u);
 
-        self.eps[2:-2] = eps_new[2:-2] - self.dt/self.dx*(self.gamma-1)*eps_new[2:-2]*(u_new[3:-1]-u_new[2:-2]);        
-        self.update_boundary(self.eps);         
+        self.eps[2:-2] = eps_new[2:-2]*(1 - self.dt/self.dx*(self.gamma-1)*(u_new[3:-1]-u_new[2:-2]));        
+        self.update_boundary_eps(self.eps);
 
         self.rho = rho_new;        
 
@@ -118,17 +114,12 @@ class Box():
         delta = self.undivided_difference(Y);
         # calculate average at cell boundary:
         avg[1:-1] = 0.5*(Y[2:]+Y[1:-1]);
-        self.update_boundary_one(avg);
         # calculate advected quantities:
-        for n in range(1,self.N+2):
+        for n in range(2,self.N+2):
             if avg[n] > 0 :
                 adv[n] = Y[n]+0.5*(1-avg[n]*self.dt/self.dx)*delta[n];
             else:
                 adv[n] = Y[n+1]-0.5*(1+avg[n]*self.dt/self.dx)*delta[n+1];
-        # update boundaries:
-        adv[0] = adv[-4];
-        adv[-2] = adv[2];
-        adv[-1] = adv[3];
         # return resulting flux:        
         return adv;
         
@@ -143,10 +134,6 @@ class Box():
                 adv[n] = Y[n-1]+0.5*(1-self.u[n]*self.dt/self.dx)*delta[n-1];
             else:
                 adv[n] = Y[n]-0.5*(1+self.u[n]*self.dt/self.dx)*delta[n];
-        # update boundaries:
-        adv[0] = adv[-4];
-        adv[1] = adv[-3];
-        adv[-1] = adv[3];
         return adv;
                     
     def undivided_difference(self,x):
@@ -164,28 +151,30 @@ class Box():
                     delta[n] = 2*nom/denom;
             else:
                 delta[n] = 0;
-        # update boundaries:
-        delta[0] = delta[-4];
-        delta[-1] = delta[3];
         return delta;
         
     def update_boundary_all(self):
         '''Update boundaries of all variables.'''
-        self.update_boundary_rho();
-        self.update_boundary_u();
-        self.update_boundary_eps();
+        self.update_boundary_rho(self.rho);
+        self.update_boundary_velocity(self.u);
+        self.update_boundary_eps(self.eps);
 
-    def update_boundary_rho(self):
+    def update_boundary_rho(self,rho):
         '''Update ghost cells of rho.'''
-        self.update_boundary(self.rho);
+        rho[1] = rho[2];
+        rho[-1] = rho[-2];
 
-    def update_boundary_u(self):
+    def update_boundary_velocity(self,u):
         '''Update ghost cells of u.'''
-        self.update_boundary(self.u);
+        u[1] = -u[3];
+        u[2] = 0;
+        u[-1] = -u[-3];
+        u[-2] = 0;
         
-    def update_boundary_eps(self):
+    def update_boundary_eps(self,eps):
         '''Update ghost cells of eps'''
-        self.update_boundary(self.eps);
+        eps[1] = eps[2];
+        eps[-2] = eps[-3];
 
     def update_boundary(self,arr):
         ''' Update ghost cells of variable stored in arr. 
@@ -194,13 +183,6 @@ class Box():
         arr[0] = arr[-4];
         arr[1] = arr[-3];
         arr[-2] = arr[2];
-        arr[-1] = arr[3];
-        
-    def update_boundary_one(self,arr):
-        ''' Update the outer most ghost cells of variable stored in arr. 
-        Use periodic boundary conditions. '''
-        # Update ghost cells:
-        arr[0] = arr[-4];
         arr[-1] = arr[3];
             
     def get_rho(self):
@@ -217,7 +199,7 @@ class Box():
         
     def get_p(self):
         '''Return array with pressure values.'''
-        return (self.gamma-1)*self.rho[2:-2]*self.rho[2:-2];
+        return (self.gamma-1)*self.rho[2:-2]*self.eps[2:-2];
         
     def get_T(self):
         '''Return array with pressure values.'''
