@@ -74,86 +74,100 @@ class Box():
 
         u_new = np.zeros(self.N+4);
         flux_momentum = np.zeros(self.N+4);
-        flux_momentum[1:-2] = 0.5*self.advection_velocity(self.u)[1:-2]*(flux_mass[1:-2]+flux_mass[2:-1]);
+        flux_momentum[0:-1] = 0.5*self.advection_velocity(self.u)[0:-1]*(flux_mass[0:-1]+flux_mass[1:]);
+        flux_momentum[-1] = flux_momentum[3];
         rho_avg = np.zeros(self.N+4);
-        rho_avg[2:-2] = 0.5*(rho_new[1:-3]+rho_new[2:-2]);
-        if (rho_avg[2:-2]==0).any():
+        rho_avg_new = np.zeros(self.N+4);
+        rho_avg[2:-2] = 0.5*(self.rho[1:-3]+self.rho[2:-2]);
+        self.update_boundary(rho_avg);
+        rho_avg_new[2:-2] = 0.5*(rho_new[1:-3]+rho_new[2:-2]);
+        self.update_boundary(rho_avg_new);
+        if (rho_avg==0).any() or (rho_avg_new==0).any():
             print("Division by zero encountered in advection of velcoity");
-        u_new[2:-2] = (self.u[2:-2]*rho_avg[2:-2]-self.dt/self.dx*(flux_momentum[2:-2]-flux_momentum[1:-3]))/rho_avg[2:-2];
-        self.update_boundary(u_new);
+        u_new[3:-1] = (self.u[3:-1]*rho_avg[3:-1]-self.dt/self.dx*(flux_momentum[3:-1]-flux_momentum[2:-2]))/rho_avg_new[3:-1];
+        u_new[0] = u_new[-4];
+        u_new[1] = u_new[-3];
+        u_new[2] = u_new[-2];
+        u_new[-1] = u_new[3];
         
         eps_new = np.zeros(self.N+4);
         flux_eps = flux_momentum*self.advection_scalar(self.eps);
-        if (rho_avg[2:-2]==0).any():
+        if (rho_avg==0).any():
             print("Division by zero encountered in advection of energy");
         eps_new[2:-2] = (self.eps[2:-2]*self.rho[2:-2]-self.dt/self.dx*(flux_eps[3:-1]-flux_eps[2:-2]))/rho_new[2:-2];
         self.update_boundary(eps_new);
         
-        self.rho = rho_new;        
-        
         # force and pressure terms
         p = (self.gamma-1)*rho_new*eps_new;
-        self.u[2:-2] = u_new[2:-2] - self.dt/self.dx/rho_avg[2:-2]*(p[2:-2]-p[1:-3]);
-        self.update_boundary(self.u);
+        self.u[3:-1] = u_new[3:-1] - self.dt/self.dx*(p[3:-1]-p[2:-2])/rho_avg[2:-2];
+        self.u[0] = self.u[-4];
+        self.u[1] = self.u[-3];
+        self.u[2] = self.u[-2];
+        self.u[-1] = self.u[3];
 
-        self.eps[2:-2] = eps_new[2:-2] - self.dt/self.dx*p[2:-2]/rho_new[2:-2]*(u_new[3:-1]-u_new[2:-2]);        
+        self.eps[2:-2] = eps_new[2:-2] - self.dt/self.dx*(self.gamma-1)*eps_new[2:-2]*(u_new[3:-1]-u_new[2:-2]);        
         self.update_boundary(self.eps);         
+
+        self.rho = rho_new;        
 
     def advection_velocity(self,Y):
         '''Calculate the flux of a vector variable using the
         2nd order upwind scheme'''
-        delta = np.zeros(self.N+4);
         avg = np.zeros(self.N+4);
         adv = np.zeros(self.N+4);
-        # calculate geometrical mean:
-        for n in range(1,self.N+3):
-            nom = (Y[n+1]-Y[n])*(Y[n]-Y[n-1]);
-            denom = (Y[n+1]-Y[n-1]);
-            if nom>0:
-                if (denom == 0):
-                    print("Encountered division by 0 in advection step of ",Y.__name__);
-                    delta[n] = 0;
-                else:
-                    delta[n] = 2*nom/denom;
-            else:
-                delta[n] = 0;
+        delta = self.undivided_difference(Y);
         # calculate average at cell boundary:
-        avg[0:-1] = 0.5*(Y[1:]+Y[0:-1]);
+        avg[1:-1] = 0.5*(Y[2:]+Y[1:-1]);
+        self.update_boundary_one(avg);
         # calculate advected quantities:
         for n in range(1,self.N+2):
             if avg[n] > 0 :
                 adv[n] = Y[n]+0.5*(1-avg[n]*self.dt/self.dx)*delta[n];
             else:
-                adv[n] = Y[n+1] - 0.5*(1-avg[n]*self.dt/self.dx)*delta[n+1];
-        # return resulting flux:
+                adv[n] = Y[n+1]-0.5*(1+avg[n]*self.dt/self.dx)*delta[n+1];
+        # update boundaries:
+        adv[0] = adv[-4];
+        adv[-2] = adv[2];
+        adv[-1] = adv[3];
+        # return resulting flux:        
         return adv;
         
     def advection_scalar(self,Y):
         '''Calculate the flux of a scalar variable using the
         2nd order upwind scheme'''
-        delta = np.zeros(self.N+4);
         adv = np.zeros(self.N+4);
-        # calculate geometrical mean:
-        for n in range(1,self.N+3):
-            nom = (Y[n+1]-Y[n])*(Y[n]-Y[n-1]);
-            denom = (Y[n+1]-Y[n-1]);
-            if nom>0:
-                if (denom == 0):
-                    print("Encountered division by 0 in advection step of ",Y.__name__);
-                    delta[n] = 0;
-                else:
-                    delta[n] = 2*nom/denom;
-            else:
-                delta[n] = 0;
+        delta = self.undivided_difference(Y);
         # calculate advected quantities:
         for n in range(2,self.N+3):
             if self.u[n] > 0 :
                 adv[n] = Y[n-1]+0.5*(1-self.u[n]*self.dt/self.dx)*delta[n-1];
             else:
-                adv[n] = Y[n] - 0.5*(1-self.u[n]*self.dt/self.dx)*delta[n];
-        # return resulting flux:
+                adv[n] = Y[n]-0.5*(1+self.u[n]*self.dt/self.dx)*delta[n];
+        # update boundaries:
+        adv[0] = adv[-4];
+        adv[1] = adv[-3];
+        adv[-1] = adv[3];
         return adv;
-                            
+                    
+    def undivided_difference(self,x):
+        '''Calculate the undivided difference of quantity x for use in advection step following van Leer 1972.
+        x must be an array of length self.N+4.'''
+        delta = np.zeros(self.N+4);
+        for n in range(1,self.N+3):
+            nom = (x[n+1]-x[n])*(x[n]-x[n-1]);
+            denom = (x[n+1]-x[n-1]);
+            if nom>0:
+                if (denom == 0):
+                    print("Encountered division by 0 in calculation of undivided difference of ",x.__name__);
+                    delta[n] = 0;
+                else:
+                    delta[n] = 2*nom/denom;
+            else:
+                delta[n] = 0;
+        # update boundaries:
+        delta[0] = delta[-4];
+        delta[-1] = delta[3];
+        return delta;
         
     def update_boundary_all(self):
         '''Update boundaries of all variables.'''
@@ -180,6 +194,13 @@ class Box():
         arr[0] = arr[-4];
         arr[1] = arr[-3];
         arr[-2] = arr[2];
+        arr[-1] = arr[3];
+        
+    def update_boundary_one(self,arr):
+        ''' Update the outer most ghost cells of variable stored in arr. 
+        Use periodic boundary conditions. '''
+        # Update ghost cells:
+        arr[0] = arr[-4];
         arr[-1] = arr[3];
             
     def get_rho(self):

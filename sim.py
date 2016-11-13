@@ -6,7 +6,7 @@ Created on Sat Nov 12 15:01:47 2016
 """
 
 import shocktube;
-import numpy as np;
+#import numpy as np;
 import matplotlib.pyplot as plt;
 
 def rho0(x):
@@ -39,8 +39,9 @@ data_string += "# I    x(i)      u(i)       rho(i)   Temp(i)   Pgas(i)\n"
 for n in range(N_cells):
     data_string += "{0:03d}\t{1:.3e}\t{2:.3e}\t{3:.3e}\t{4:.3e}\t{5:.3e}\n".format(n,x[n],u[n],rho[n],T[n],p[n]);
 
-with open("numerical_results.txt", "w") as text_file:
+with open("shocktube_sol_num.txt", "w") as text_file:
     text_file.write(data_string);
+
 
 plt.plot(x,rho);
 plt.plot(x,u);
