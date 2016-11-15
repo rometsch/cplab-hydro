@@ -1,8 +1,11 @@
 # cplab-hydro
 hydrodynamics project for my computational physics lab
 
+Run `run.sh` to produce all results of this lab project.
+Modify this script to use the right commands for python and gnuplot.
+
 ## shocktube problem
-A numerical solution of the shocktube problem is performed in `sim.py`.
+A numerical solution of the shocktube problem is performed in `sim_shocktube.py`.
 To run the simulation and produce a plot comparing the obtained solution to an
 analytical one run
 `run.sh`
