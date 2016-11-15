@@ -22,13 +22,13 @@ set origin 0.0,0.0
 set label "shocktube solution at time t = 0.228" at 0.55,2.1
 set multiplot
 set xrange[.0:1.0]
+set key above
 #
 set size 0.45,0.45
 set origin 0.025,0.475
 set ylabel "Velocity"
 plot analytic u 2:3 title "analytic" ls 1, numeric u 2:3 title "numeric" ls 2
 set title
-set key
 set nolabel
 #
 set size 0.45,0.45
