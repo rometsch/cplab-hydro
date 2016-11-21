@@ -15,16 +15,16 @@ def initial_function(x):
         return 1.0;
 
 
-def plot_after_time(T,methods):
+def plot_after_time(T,N,methods):
     # Plot integrated function after time T for all methods in method:
     plt.figure();
     plt.clf();
     labels = ["analytic"];
     # Plot initial function:
-    initial = advection.Box(initial_function,[-1,1],400,1.0);
+    initial = advection.Box(initial_function,[-1,1],N,1.0);
     plt.plot(initial.get_x(),initial.get_Psi(),'-')
     for method in methods:
-        box = advection.Box(initial_function,[-1,1],400,1.0);
+        box = advection.Box(initial_function,[-1,1],N,1.0);
         box.integrate(T,method);
         labels.append(method);
         plt.plot(box.get_x(),box.get_Psi(),'.')
@@ -36,5 +36,5 @@ def plot_after_time(T,methods):
     plt.savefig("T{}.pdf".format(T));
     
 
-plot_after_time(0.4,['upwind','upwind_2nd_arr','lax_wendroff'])    
-plot_after_time(40,['upwind','upwind_2nd_arr','lax_wendroff'])   
+plot_after_time(4,40,['upwind','upwind_2nd_arr','lax_wendroff'])    
+plot_after_time(40,600,['upwind','upwind_2nd_arr','lax_wendroff'])   
